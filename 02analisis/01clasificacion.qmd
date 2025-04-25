@@ -1,0 +1,177 @@
+---
+title: "Clasificacion de cobertura de suelo"
+author: "Joaquin Riquelme"
+date: "`r Sys.Date()`"
+format: html
+editor: visual
+---
+
+```{r setup}
+# Instalar y cargar paquetes necesarios
+library(devtools)
+install_github("ranghetti/sen2r")
+library(sen2r)
+install.packages("sf")
+packages <- c("sen2r", "sf", "terra", "caret", "randomForest", "dplyr", "ggplot2", "doParallel")
+```
+
+```{r functions}
+# Funciones modulares para reutilizar
+load_aoi <- function(path) {
+  st_read(path)
+}
+download_sentinel <- function(aoi, start, end, cloud_max) {
+  sen2r(
+    gui = FALSE,
+    step_atmcorr = "l2a",
+    extent = aoi,
+    timewindow = c(start, end),
+    max_cloud_safe = cloud_max,
+    list_prods = c("BOA"),
+    list_indices = c("NDVI", "EVI"),
+    out_folder = "S2_data",
+    path_l1c = "S2_data/L1C",
+    path_l2a = "S2_data/L2A",
+    cloud_mask_method = "s2cloudless"
+  )
+}
+```
+
+# 1. Carga de parámetros y AOI
+
+```{r params}
+aoi <- load_aoi(params$aoi_path)
+start_date <- params$start_date
+end_date <- params$end_date
+cloud_max <- params$cloud_max
+training_path <- params$training_path
+```
+
+# 2. Descarga y cálculo de índices espectrales
+
+```{r download_indices}
+download_sentinel(aoi, start_date, end_date, cloud_max)
+# Carga de los índices generados
+dirs_indices <- list.dirs("S2_data/L2A/indices", recursive = FALSE)
+ndvi_stack <- rast(list.files(dirs_indices[grep("NDVI", dirs_indices)], pattern = "\\.tif$", full.names = TRUE))
+evi_stack  <- rast(list.files(dirs_indices[grep("EVI", dirs_indices)],  pattern = "\\.tif$", full.names = TRUE))
+plot(ndvi_stack, main = "NDVI - Sentinel-2")
+plot(evi_stack,  main = "EVI - Sentinel-2")
+```
+
+# 3. Clasificación supervisada con validación y paralelización
+
+```{r classification}
+# Cargar bandas BOA (B02, B03, B04, B08)
+bands <- list.files("S2_data/L2A/BANDS", pattern = "B(02|03|04|08)\\.tif$", full.names = TRUE)
+ms_stack <- rast(bands)
+
+# Preparar datos de entrenamiento
+training <- st_read(training_path)
+train_vals <- extract(ms_stack, training, df = TRUE)
+train_df   <- cbind(train_vals, class = training$class)
+
+# Configurar paralelización
+events <- detectCores() - 1
+cl <- makePSOCKcluster(events)
+registerDoParallel(cl)
+
+# Validación cruzada y ajuste de hiperparámetros
+ctrl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+tune_grid <- expand.grid(.mtry = c(2, 3, 4))
+
+set.seed(123)
+rf_model <- train(
+  class ~ .,
+  data = train_df,
+  method = "rf",
+  tuneGrid = tune_grid,
+  trControl = ctrl,
+  ntree = 500
+)
+
+stopCluster(cl)
+
+# Predicción paralelizada
+taxonomy <- terra::predict(ms_stack, rf_model$finalModel, type = "response", cores = events)
+plot(taxonomy, main = "Clasificación RF Optimizada")
+```
+
+# 4. Evaluación temporal de la clasificación y métricas
+
+```{r temporal_evaluation}
+# Inicializar dataframes
+results_area <- data.frame()
+metrics_list <- list()
+
+dates_dirs <- list.dirs("S2_data/L2A/BANDS", recursive = FALSE)
+for (dir in dates_dirs) {
+  date <- as.Date(basename(dir), format = "%Y%m%d")
+  bands_i <- list.files(dir, pattern = "B(02|03|04|08)\\.tif$", full.names = TRUE)
+  stack_i <- rast(bands_i)
+  class_i <- terra::predict(stack_i, rf_model$finalModel, type = "response", cores = 1)
+  
+  # Cálculo de área por clase
+  freq_tab <- as.data.frame(freq(class_i))
+  freq_tab <- freq_tab %>%
+    mutate(
+      area_km2 = count * prod(res(class_i)) / 1e6,
+      date     = date
+    ) %>%
+    select(date, value, area_km2)
+  results_area <- bind_rows(results_area, freq_tab)
+  
+  # Evaluación con datos de validación (si existen)
+  val_path <- file.path("validation", basename(dir), "validation.shp")
+  if (file.exists(val_path)) {
+    val_truth <- st_read(val_path)
+    val_vals  <- extract(stack_i, val_truth, df = TRUE)
+    df_val    <- cbind(val_vals, class = val_truth$class)
+    preds     <- predict(rf_model, newdata = df_val)
+    cm        <- confusionMatrix(preds, as.factor(df_val$class))
+    metrics_list[[as.character(date)]] <- cm$overall
+  }
+}
+
+# Gráfico de evolución de área
+ggplot(results_area, aes(x = date, y = area_km2, color = factor(value))) +
+  geom_line() +
+  labs(title = "Evolución Temporal de Clases", x = "Fecha", y = "Área (km²)", color = "Clase") +
+  theme_minimal()
+
+# Mostrar métricas de validación si existen
+if (length(metrics_list) > 0) {
+  metrics_df <- bind_rows(metrics_list, .id = "date")
+  print(metrics_df)
+}
+```
+
+# Cómo renderizar este reporte
+
+Puedes generar el informe HTML con:
+
+```bash
+quarto render sentinel2_analysis.qmd --to html
+```
+
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
