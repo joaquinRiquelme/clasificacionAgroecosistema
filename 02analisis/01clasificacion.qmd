@@ -11,8 +11,7 @@ editor: visual
 library(devtools)
 install_github("ranghetti/sen2r")
 library(sen2r)
-install.packages("sf")
-packages <- c("sen2r", "sf", "terra", "caret", "randomForest", "dplyr", "ggplot2", "doParallel")
+library(sf)
 ```
 
 ```{r functions}
@@ -40,6 +39,13 @@ download_sentinel <- function(aoi, start, end, cloud_max) {
 # 1. Carga de parámetros y AOI
 
 ```{r params}
+params <- list()
+params$aoi_path <- "../01datosEntrada/"
+params$start_date <- ""
+params$end_date
+params$cloud_max
+params$training_path
+
 aoi <- load_aoi(params$aoi_path)
 start_date <- params$start_date
 end_date <- params$end_date
