@@ -1,0 +1,261 @@
+---
+title: "Datos de entrada para estudio de dinámica de paisaje de cuenca del río Aconcagua"
+author: "Joaquín Riquelme Alarcón, Francisco Zambrano Altieri"
+date: "`r Sys.Date()`"
+format: html
+editor: visual
+---
+
+```{r preambulo, echo=TRUE, warning=FALSE, results='hide'}
+
+# para instalar el paquete sen2r desde github
+# devtools::install_github("ranghetti/sen2r")
+
+library(sf)
+library(ggplot2)
+library(terra) 
+library(dplyr)
+library(lubridate)
+library(sen2r)
+library(s2)
+library(gdalraster)
+sen2r::check_gcloud()
+sen2r::check_gcloud_connection()
+
+```
+
+
+### 1. Determinacion de area y periodo de estudio
+
+En este caso el area de estudio se provee como un archivo vectorial basado en los limites de la cuenca del río Aconcagua.
+```{r area, echo=FALSE}
+
+# cargar archivo shp de area de estudio
+area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconcagua
+# area_estudio_sf <- st_read("../01entrada/.shp") # cuenca de Aconcagua
+# transformacion a sistema de coordenadas 4326 wgs 84
+# area_estudio_sf <- st_transform(area_estudio_sf, crs = 4326)
+# plot(area_estudio_sf)
+area2 <- area_estudio_sf[,"NOM_CUEN"]
+names(area2) <- c("Aconcagua", "geometry")
+
+plot(area2)
+
+ae_extent <- st_bbox(area2)
+ae_extent
+
+
+```
+
+Los datos de Sentinel-2 estan disponibles desde el año 2015 hasta la fecha y su periodicidad es de 5 dias.
+
+```{r periodo, echo=FALSE}
+# fecha de inicio
+fecha_inicio <- "2020-06-01"
+# fecha de termino 
+fecha_fin <- "2020-12-31"
+
+fechas_sentinel <- tibble(
+  fecha_adquisicion = seq(as.Date(fecha_inicio), as.Date(fecha_fin), by = "week")
+) %>%
+  sample_frac(1) %>% # Selecciona aleatoriamente el 20% de los días para simular adquisiciones
+  arrange(fecha_adquisicion) %>%
+  mutate(
+    disponibilidad = "Imagen Disponible",
+    # Simular algunas fechas con "nubes" o no disponibles para el análisis
+    tipo = sample(c("Clara", "Nubes/No Usable"), size = n(), replace = TRUE, prob = c(0.8, 0.2))
+  )
+
+grafico_sentinel <- ggplot(fechas_sentinel, aes(x = fecha_adquisicion, y = 1)) +
+  geom_point(aes(color = tipo), size = 2, alpha = 0.8) + 
+  geom_vline(xintercept = as.numeric(as.Date(fecha_inicio)), linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = as.numeric(as.Date(fecha_fin)), linetype = "dashed", color = "grey50") +
+  annotate("rect",
+           xmin = as.Date("2015-01-01"), xmax = as.Date("2025-06-30"),
+           ymin = 0.5, ymax = 1.5, # Ajustar ymin/ymax para que el rectángulo abarque los puntos
+           fill = "lightblue", alpha = 0.2) +
+  # annotate("text",
+           # x = mean(c(as.Date("2015-01-01"), as.Date("2025-06-30"))),
+           # y = 1.6, label = "Periodo de estudio", color = "darkblue", size = 4, fontface = "bold") +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") + # Formato del eje X
+  scale_y_continuous(breaks = NULL) + # Eliminar etiquetas del eje Y
+  labs(
+    title = "Fechas de Adquisición de Imágenes Sentinel-2",
+    x = "Año",
+    y = NULL,
+    color = "Estado de la Imagen"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_blank(), # Quitar texto del eje Y
+    axis.ticks.y = element_blank(), # Quitar marcas del eje Y
+    panel.grid.major.y = element_blank(), # Quitar líneas de cuadrícula mayores del eje Y
+    panel.grid.minor.y = element_blank(), # Quitar líneas de cuadrícula menores del eje Y
+    plot.title = element_text(hjust = 0.5) # Centrar el título
+  )
+
+print(grafico_sentinel)
+
+
+
+# Definir el directorio de salida
+output_dir <- "../03salida/" 
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+print("Buscando imágenes disponibles...")
+sen2r::is_gcloud_configured()
+sen2r::check_gcloud_connection()
+sen2r::check_gdal()
+sen2r::check_sen2r_deps()
+
+# /home/joaquin/google-cloud-sdk
+
+st_crs(area2) <-  sf::st_crs(area2)
+st_
+
+s2_products <- s2_list(
+  spatial_extent =  area_estudio_sf,
+  # spatial_extent =  area2,
+  time_interval = as.Date(c(fecha_inicio, fecha_fin)),
+  time_period = "full",
+  # s2_levels = "l2a",        # Nivel de procesamiento: L2A (corregido atmosféricamente)
+  level = "L2A",        
+  server = "gcloud", 
+  # outformat = "GTiff",# servidor de busqueda
+  max_cloud = 100     # maximo 20 de nubes en la imagen completa
+  # online = TRUE            # Buscar en línea
+)
+
+sen2r(
+    gui = FALSE,
+    server = "gcloud",
+    step_atmcorr = "l2a",
+    # extent = system.file("extdata/vector/barbellino.geojson", package = "sen2r"),
+    extent = "../01entrada/cuencaAconcagua.shp",
+    # extent_name = "Barbellino",
+    timewindow = as.Date("2020-08-01"),
+    list_prods = c("TOA","BOA","SCL","OAA"),
+    # list_indices = c("NDVI","MSAVI2"),
+    # list_rgb = c("RGB432T", "RGB432B", "RGB843B"),
+    # mask_type = "cloud_medium_proba",
+    # max_mask = 80,
+    path_l1c = "../03salida/l1c",
+    path_l2a = "../03salida/l2a",
+    path_out = "../03salida/out",
+    downloader = "aria2"
+)
+
+# Mostrar las primeras entradas de la lista
+print(head(s2_products))
+print(paste("Número de imágenes encontradas:", length(s2_products)))
+
+pos <- sf::st_sfc(sf::st_point(c(9.85,45.81)), crs = 4326)
+plot(pos)
+time_window <- as.Date(c("2020-08-01", "2020-08-11"))
+
+# Full-period list
+if (is_gcloud_configured()) {
+  example_s2_list <- s2_list(server = "gcloud",
+    spatial_extent = pos,
+    tile = "32TNR",
+    time_interval = time_window,
+    orbit = "065"
+  )
+} else {
+  example_s2_list <- as(character(), "safelist")
+}
+print(example_s2_list)
+# Print the dates of the retrieved products
+safe_getMetadata(example_s2_list, "sensing_datetime")
+
+# Seasonal-period list
+if (is_gcloud_configured()) {
+  example_s2_list <- s2_list(
+    spatial_extent = pos,
+    tile = "32TNR",
+    time_interval = time_window,
+    time_period = "seasonal"
+  )
+} else {
+  example_s2_list <- as(character(), "safelist")
+}
+print(example_s2_list)
+# Print the dates of the retrieved products
+safe_getMetadata(example_s2_list, "sensing_datetime")
+
+
+```
+
+
+
+# Set your Python ENV
+Sys.setenv("RETICULATE_PYTHON" = "/usr/bin/python3")
+
+earthengine_python <- Sys.getenv("EARTHENGINE_PYTHON", unset = NA)
+Sys.setenv(RETICULATE_PYTHON = earthengine_python)
+
+# Set Google Cloud SDK. Only need it the first time you log in. 
+Sys.setenv("EARTHENGINE_GCLOUD" = "home/csaybar/google-cloud-sdk/bin/")
+
+
+reticulate::py_config()
+
+
+
+
+
+ee_Authenticate()
+
+# Initialize your Earth Engine Session 
+ee_Initialize(project = "my-project-id")
+
+ee_Initialize(drive = TRUE)
+ee_install()
+
+aoi <- load_aoi(params$aoi_path)
+start_date <- params$start_date
+end_date <- params$end_date
+cloud_max <- params$cloud_max
+training_path <- params$training_path
+# Convertir el objeto sf a un objeto de Google Earth Engine
+area_estudio_ee <- sf_as_ee(area_estudio_sf)
+
+# --- Definir parámetros de descarga de Sentinel-2 ---
+fecha_inicio <- "2024-01-01"
+fecha_fin <- "2024-03-31" # Ejemplo: primer trimestre de 2024
+nubosidad_max <- 10 # Porcentaje máximo de nubosidad
+
+# Colección de imágenes Sentinel-2 (Top of Atmosphere, o S2_SR para reflectancia de superficie)
+coleccion_s2 <- ee$ImageCollection("COPERNICUS/S2") %>%
+  ee$ImageCollection$filterDate(fecha_inicio, fecha_fin) %>%
+  ee$ImageCollection$filterBounds(area_estudio_ee) %>%
+  ee$ImageCollection$filterMetadata("CLOUDY_PIXEL_PERCENTAGE", "less_than", nubosidad_max)
+
+# Para clasificaciones, a menudo se usa la mediana o el promedio de un periodo
+imagen_compuesta <- coleccion_s2$median()$clip(area_estudio_ee)
+
+# Seleccionar las bandas a utilizar para la clasificación
+# B2: Azul, B3: Verde, B4: Rojo, B8: NIR, B11: SWIR1, B12: SWIR2
+bandas_para_clasificar <- c("B2", "B3", "B4", "B8", "B11", "B12")
+imagen_clasificar <- imagen_compuesta$select(bandas_para_clasificar)
+
+# --- Visualizar la imagen compuesta (opcional) ---
+# Puedes visualizarla en el visor de GEE para asegurarte de que es correcta.
+Map$centerObject(area_estudio_ee, 8)
+Map$addLayer(imagen_clasificar,
+             visParams = list(min = 0, max = 3000, bands = c("B4", "B3", "B2")),
+             name = "Sentinel-2 Compuesta")
+
+
+
+download_sentinel(aoi, start_date, end_date, cloud_max)
+# Carga de los índices generados
+dirs_indices <- list.dirs("S2_data/L2A/indices", recursive = FALSE)
+ndvi_stack <- rast(list.files(dirs_indices[grep("NDVI", dirs_indices)], pattern = "\\.tif$", full.names = TRUE))
+evi_stack  <- rast(list.files(dirs_indices[grep("EVI", dirs_indices)],  pattern = "\\.tif$", full.names = TRUE))
+plot(ndvi_stack, main = "NDVI - Sentinel-2")
+plot(evi_stack,  main = "EVI - Sentinel-2")
+```
+
