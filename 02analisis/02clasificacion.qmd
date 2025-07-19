@@ -1,194 +1,202 @@
 ---
 title: "Clasificacion de cobertura de suelo"
-author: "Joaquín Riquelme Alarcón"
+author: "Joaquín Riquelme Alarcón y Francisco Zambrano Bigiarini"
 date: "`r Sys.Date()`"
 format: html
 editor: visual
 ---
 
-```{r preambulo, echo=TRUE, warning=FALSE, results='hide'}
+```{r preambulo, echo=TRUE, warning=FALSE, error=FALSE, results='hide'}
 
-devtools::install_github("ranghetti/sen2r")
+# devtools::install_github("ranghetti/sen2r")
 
 library(sen2r)
 library(sf)
+library(dplyr)
+library(tidyverse)
 library(ggplot2)
 library(terra) 
 library(RColorBrewer)
 library(randomForest)
+library(caret)
+set.seed(1234)
 
 ```
 
-### 1. Sesión de google earth engine
+### 1. Area y periodo de estudio 
 
-```{r sesionEE}
+Se define el area de estudio a traves de un shapefile. Se define el año para los datos de entrenamiento y la ventana de tiempo para las imagenes satelitales.
 
-# Set your Python ENV
-Sys.setenv("RETICULATE_PYTHON" = "/usr/bin/python3")
+```{r area, echo=TRUE}
 
-earthengine_python <- Sys.getenv("EARTHENGINE_PYTHON", unset = NA)
-Sys.setenv(RETICULATE_PYTHON = earthengine_python)
+# cuenca de Aconcagua
+# area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconcagua
 
-# Set Google Cloud SDK. Only need it the first time you log in. 
-Sys.setenv("EARTHENGINE_GCLOUD" = "home/csaybar/google-cloud-sdk/bin/")
+# subsubcuenca de Aconcagua 05420
+area_estudio_sf <- st_read("../01entrada/subsubcuencaAconcagua05420.shp") |>
+  select("COD_SSUBC")|>
+  st_transform(area_estudio_sf, crs = 4326)
+plot(area_estudio_sf)
+crs(area_estudio_sf)
 
+ae_vec <-  vect(area_estudio_sf)
+# año de entrenamiento
+anho_train <- "2014"
+# anho_train <- "2017"
+# anho_train <- "2020"
 
-reticulate::py_config()
-
-
-
-
-
-ee_Authenticate()
-
-# Initialize your Earth Engine Session 
-ee_Initialize(project = "my-project-id")
-
-ee_Initialize(drive = TRUE)
-ee_install()
-
-aoi <- load_aoi(params$aoi_path)
-start_date <- params$start_date
-end_date <- params$end_date
-cloud_max <- params$cloud_max
-training_path <- params$training_path
-```
-
-## 
-
-### 2. Delimitacion del area de estudio
-
-```{r area}
-
-# cargar archivo shp de area de estudio
-area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconcagua
-# area_estudio_sf <- st_read("../01entrada/.shp") # cuenca de Aconcagua
-# transformacion a sistema de coordenadas 4326 wgs 84
-area_estudio_sf <- st_transform(area_estudio_sf, crs = 4326)
-
-# Convertir el objeto sf a un objeto de Google Earth Engine
-area_estudio_ee <- sf_as_ee(area_estudio_sf)
-
-# --- Definir parámetros de descarga de Sentinel-2 ---
+# rango de fechas de imagenes
 fecha_inicio <- "2024-01-01"
-fecha_fin <- "2024-03-31" # Ejemplo: primer trimestre de 2024
-nubosidad_max <- 10 # Porcentaje máximo de nubosidad
+fecha_fin <- "2024-03-31"
+```
 
-# Colección de imágenes Sentinel-2 (Top of Atmosphere, o S2_SR para reflectancia de superficie)
-coleccion_s2 <- ee$ImageCollection("COPERNICUS/S2") %>%
-  ee$ImageCollection$filterDate(fecha_inicio, fecha_fin) %>%
-  ee$ImageCollection$filterBounds(area_estudio_ee) %>%
-  ee$ImageCollection$filterMetadata("CLOUDY_PIXEL_PERCENTAGE", "less_than", nubosidad_max)
 
-# Para clasificaciones, a menudo se usa la mediana o el promedio de un periodo
-imagen_compuesta <- coleccion_s2$median()$clip(area_estudio_ee)
+### 2. Parámetros de imagenes satelitales
+
+Definicion de bandas y nubosidad a utilizar para la clasificacion supervisada.
+```{r parametros, echo=TRUE}
+nubosidad_max <- 100 # Porcentaje maximo de nubosidad permitido
 
 # Seleccionar las bandas a utilizar para la clasificación
-# B2: Azul, B3: Verde, B4: Rojo, B8: NIR, B11: SWIR1, B12: SWIR2
-bandas_para_clasificar <- c("B2", "B3", "B4", "B8", "B11", "B12")
-imagen_clasificar <- imagen_compuesta$select(bandas_para_clasificar)
+# B2: Azul, B3: Verde, B4: Rojo, B8: NIR
+bandas_clasi <- c("B02", "B03", "B04", "B08")#, "B11", "B12")
 
-# --- Visualizar la imagen compuesta (opcional) ---
-# Puedes visualizarla en el visor de GEE para asegurarte de que es correcta.
-Map$centerObject(area_estudio_ee, 8)
-Map$addLayer(imagen_clasificar,
-             visParams = list(min = 0, max = 3000, bands = c("B4", "B3", "B2")),
-             name = "Sentinel-2 Compuesta")
+#tiles_19_H_CD_S2A_MSIL1C_20150808T144816_N0204_R096_T19HCD_20150808T144817.SAFE_GRANULE_L1C_T19HCD_A000665_20150808T144817_IMG_DATA_T19HCD_20150808T144816_B04
+
+imagenes <- list.files("../03salida/", pattern = "\\.jp2", full.names = TRUE)
+
+# leer las imagenes en un raster de terra
+capas <- rast(imagenes)
+plot(capas)
+
+crs(capas)
+
+# reproyectar y cortar al area de estudio
+capas_geo <- project(capas, crs(area_estudio_sf))
+capas_crop <- crop(capas_geo, ae_vec)
+names(capas_crop) <- c("B02", "B03", "B04", "B08") 
+capas_mask <- terra::mask(x = capas_crop, mask = ae_vec)
+names(capas_mask) <- c("B02", "B03", "B04", "B08") 
+
+capas_mask <- trim(capas_mask)
+capas_mask[is.na(capas_mask)] <- 0
 
 
+plot(capas_mask)
+plot(capas_mask[[4]])
+crs(capas_mask)
+crs(area_estudio_sf)
+writeRaster(capas_mask, "../03salida/capas_mask.tif", overwrite = TRUE)
 
-download_sentinel(aoi, start_date, end_date, cloud_max)
-# Carga de los índices generados
-dirs_indices <- list.dirs("S2_data/L2A/indices", recursive = FALSE)
-ndvi_stack <- rast(list.files(dirs_indices[grep("NDVI", dirs_indices)], pattern = "\\.tif$", full.names = TRUE))
-evi_stack  <- rast(list.files(dirs_indices[grep("EVI", dirs_indices)],  pattern = "\\.tif$", full.names = TRUE))
-plot(ndvi_stack, main = "NDVI - Sentinel-2")
-plot(evi_stack,  main = "EVI - Sentinel-2")
+
 ```
 
-### 3. Clasificación supervisada con validación y paralelización
+### 3. Clasificación supervisada con poligonos de entrenamiento
 
-```{r classification}
-# Cargar bandas BOA (B02, B03, B04, B08)
-bands <- list.files("S2_data/L2A/BANDS", pattern = "B(02|03|04|08)\\.tif$", full.names = TRUE)
-ms_stack <- rast(bands)
-
+```{r clasificacion, echo=TRUE}
+# stack con bandas 
+# bandas_stack <- rast(capas_mask)
+bandas_stack <- rast(capas_crop)
+bandas_stack <- rast(capas_mask)
+plot(bandas_stack)
+crs(bandas_stack)
 # Preparar datos de entrenamiento
-training <- st_read(training_path)
-train_vals <- extract(ms_stack, training, df = TRUE)
-train_df   <- cbind(train_vals, class = training$class)
+train_path <- "../01entrada/catfrut_valparaiso.gpkg"
+st_layers(train_path)
 
-# Configurar paralelización
-events <- detectCores() - 1
-cl <- makePSOCKcluster(events)
-registerDoParallel(cl)
+train <- st_read(train_path, layer =  anho_train) |>
+  select("ESPECIE") |>
+  st_transform(crs = 4326) 
+  # st_crop(st_bbox(area_estudio_sf))
+sf_use_s2(FALSE)
+train_crop <- st_crop(train, st_bbox(area_estudio_sf))
+train_inter <- st_intersection(train, area_estudio_sf) |>
+  select("ESPECIE")
+plot(train_crop)
+plot(train_inter)
+
+# rasterizar poligonos de entrenamiento para que cada pixel contenga la informacion
+train_rast <-terra:: rasterize(train_inter, capas_crop, field="ESPECIE")
+train_pol <- as.polygons(train_rast, dissolve=FALSE)
+
+plot(train_rast)
+plot(train_pol)
+
+# cruce de valores de entrenamiento y bandas
+train_vals <- terra::extract(capas_mask, train_pol, df = TRUE)
+head(train_vals)
+train_df   <- cbind(train_vals, class = train_pol$ESPECIE)
+head(train_df)
+train_df <- train_df |>
+  select(-"ID")
+
+head(train_df)
+write_csv(train_df, file = "../03salida/train_df.csv")
+
+train_df2 <- train_df[sample(1:nrow(train_df), size = nrow(train_df)*.01, replace = FALSE),]
+write_csv(train_df2, file = "../03salida/train_df2.csv")
+
 
 # Validación cruzada y ajuste de hiperparámetros
-ctrl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+ctrl <- trainControl(method = "cv", number = 5)
 tune_grid <- expand.grid(.mtry = c(2, 3, 4))
 
-set.seed(123)
+
+
 rf_model <- train(
   class ~ .,
-  data = train_df,
+  data = train_df2,
   method = "rf",
   tuneGrid = tune_grid,
   trControl = ctrl,
   ntree = 500
 )
 
-stopCluster(cl)
 
-# Predicción paralelizada
-taxonomy <- terra::predict(ms_stack, rf_model$finalModel, type = "response", cores = events)
-plot(taxonomy, main = "Clasificación RF Optimizada")
+# Guardar modelo
+saveRDS(rf_model, file = "../03salida/modelo_rf.rds")
+# rf_model <- readRDS("modelo_rf.rds")
+
+# Prediccion en el area de estudio
+clasificacion0 <- terra::predict(capas_mask, #mask=TRUE,
+                                rf_model$finalModel, 
+                                type = "response")#, cores = events)
+
+plot(clasificacion0, main = "Clasificación Random Forest supervisada")
+
+
+class(clasificacion0)
+clasificacion_mask <- terra::mask(x = clasificacion0, mask = ae_vec)
+plot(clasificacion_mask)
+writeRaster(clasificacion_mask, "../03salida/clasificacion2014.tif", overwrite = TRUE)
+# writeRaster(clasificacion, "../03salida/clasificacion.tif", overwrite = TRUE)
+# writeRaster(clasificacion, "../03salida/clasificacion.tif", overwrite = TRUE)
+
+
 ```
 
-### 4. Evaluación temporal de la clasificación y métricas
+### 4. Evaluación de la clasificacion
 
-```{r temporal_evaluation}
-# Inicializar dataframes
-results_area <- data.frame()
-metrics_list <- list()
+```{r evaluacion, echo=TRUE, eval=FALSE}
 
-dates_dirs <- list.dirs("S2_data/L2A/BANDS", recursive = FALSE)
-for (dir in dates_dirs) {
-  date <- as.Date(basename(dir), format = "%Y%m%d")
-  bands_i <- list.files(dir, pattern = "B(02|03|04|08)\\.tif$", full.names = TRUE)
-  stack_i <- rast(bands_i)
-  class_i <- terra::predict(stack_i, rf_model$finalModel, type = "response", cores = 1)
-  
-  # Cálculo de área por clase
-  freq_tab <- as.data.frame(freq(class_i))
-  freq_tab <- freq_tab %>%
-    mutate(
-      area_km2 = count * prod(res(class_i)) / 1e6,
-      date     = date
-    ) %>%
-    select(date, value, area_km2)
-  results_area <- bind_rows(results_area, freq_tab)
-  
-  # Evaluación con datos de validación (si existen)
-  val_path <- file.path("validation", basename(dir), "validation.shp")
-  if (file.exists(val_path)) {
-    val_truth <- st_read(val_path)
-    val_vals  <- extract(stack_i, val_truth, df = TRUE)
-    df_val    <- cbind(val_vals, class = val_truth$class)
-    preds     <- predict(rf_model, newdata = df_val)
-    cm        <- confusionMatrix(preds, as.factor(df_val$class))
-    metrics_list[[as.character(date)]] <- cm$overall
-  }
-}
 
-# Gráfico de evolución de área
-ggplot(results_area, aes(x = date, y = area_km2, color = factor(value))) +
-  geom_line() +
-  labs(title = "Evolución Temporal de Clases", x = "Fecha", y = "Área (km²)", color = "Clase") +
-  theme_minimal()
+p1 <- createDataPartition(train_df2$class, p = 0.7, list = FALSE)
 
-# Mostrar métricas de validación si existen
-if (length(metrics_list) > 0) {
-  metrics_df <- bind_rows(metrics_list, .id = "date")
-  print(metrics_df)
-}
+test <- train_df2[p1,]
+test$class2 <- factor(test$class)
+class(p1)
+
+(clasificacion0$class)
+
+
+levels(as.factor(clasificacion0))
+levels(as.factor(train_df2$class))
+
+confusionMatrix(data = clasificacion0, reference = train_df2$class)
+levels(clasificacion0$class)
+
+
+train_df2$class <- factor(x = train_df2$class, levels =  levels(clasificacion0) , )
+levels(train_df2$class)
+
 ```
