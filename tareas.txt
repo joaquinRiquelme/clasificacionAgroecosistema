@@ -1,0 +1,16 @@
+Datos entrada
+- servidor de gcloud o gee
+- Indices espectrales para la clasificacion
+- Area de estudio por elevacion
+
+Datos entrenamiento
+- Puntos de entrenamiento nativo
+- Reclasificacion de cultivos
+
+Clasificacion
+- Procesamiento para ajustar el modelo por capacidad
+- Prueba a nivel de cuenca
+
+Validacion
+- Muestras independientes?
+
