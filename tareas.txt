@@ -1,16 +1,23 @@
 Datos entrada
 - servidor de gcloud o gee
+	- otra opcion es google cloud storage y ESA
 - Indices espectrales para la clasificacion
+	- ndvi, ventana de tiempo a considerar para entrenamiento y clasificacion
 - Area de estudio por elevacion
+	- o por shape de clasificacion de uso (MAPBIOMAS O ESA 10x10)
 
 Datos entrenamiento
 - Puntos de entrenamiento nativo
 - Reclasificacion de cultivos
+	- En base a clasificacion de tipo de cultivo
 
 Clasificacion
 - Procesamiento para ajustar el modelo por capacidad
+	- tidymodels
 - Prueba a nivel de cuenca
+	- Servidor HEMERA
 
 Validacion
-- Muestras independientes?
+- Muestras independientes (fijar umbral 70-30?)
+
 
