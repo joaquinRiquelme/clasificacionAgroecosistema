@@ -1,6 +1,6 @@
 ---
 title: "Datos de entrada para estudio de dinámica de paisaje de cuenca del río Aconcagua"
-author: "Joaquín Riquelme Alarcón, Francisco Zambrano Altieri"
+author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini"
 date: "`r Sys.Date()`"
 format: html
 editor: visual
@@ -24,10 +24,10 @@ sen2r::check_gcloud_connection()
 
 ```
 
+### 1. Determinación de área y periodo de estudio
 
-### 1. Determinacion de area y periodo de estudio
+En este caso el área de estudio se provee como un archivo vectorial basado en los limites de la cuenca del río Aconcagua.
 
-En este caso el area de estudio se provee como un archivo vectorial basado en los limites de la cuenca del río Aconcagua.
 ```{r area, echo=FALSE}
 
 # cargar archivo shp de area de estudio
@@ -44,16 +44,21 @@ plot(area2)
 ae_extent <- st_bbox(area2)
 ae_extent
 
-
-```
-
-Los datos de Sentinel-2 estan disponibles desde el año 2015 hasta la fecha y su periodicidad es de 5 dias.
-
-```{r periodo, echo=FALSE}
 # fecha de inicio
 fecha_inicio <- "2020-06-01"
 # fecha de termino 
 fecha_fin <- "2020-12-31"
+
+
+```
+
+### 2. Descarga de imágenes Sentinel-2
+
+Los datos de Sentinel-2 estan disponibles desde el año 2015 hasta la fecha y su periodicidad es de 5 dias.
+
+```{r descarga, echo=FALSE}
+
+
 
 fechas_sentinel <- tibble(
   fecha_adquisicion = seq(as.Date(fecha_inicio), as.Date(fecha_fin), by = "week")
@@ -188,74 +193,20 @@ safe_getMetadata(example_s2_list, "sensing_datetime")
 
 ```
 
+### 3. Modelo de elevación de terreno
+
+Se utilizará un modelo digital de elevación como base para asignar la altitud sobre nivel del mar para el área de estudio.
+```{r elevacion}
+
+```
 
 
-# Set your Python ENV
-Sys.setenv("RETICULATE_PYTHON" = "/usr/bin/python3")
+### 4. Categorías de clasificacuón de cultivos
 
-earthengine_python <- Sys.getenv("EARTHENGINE_PYTHON", unset = NA)
-Sys.setenv(RETICULATE_PYTHON = earthengine_python)
+Para el modelo de clasificación de coberturas de suelo se utilizan los datos de ODEPA de presencia de cultivos para la cuenca del Aconcagua.
 
-# Set Google Cloud SDK. Only need it the first time you log in. 
-Sys.setenv("EARTHENGINE_GCLOUD" = "home/csaybar/google-cloud-sdk/bin/")
+```{r odepa}
 
 
-reticulate::py_config()
-
-
-
-
-
-ee_Authenticate()
-
-# Initialize your Earth Engine Session 
-ee_Initialize(project = "my-project-id")
-
-ee_Initialize(drive = TRUE)
-ee_install()
-
-aoi <- load_aoi(params$aoi_path)
-start_date <- params$start_date
-end_date <- params$end_date
-cloud_max <- params$cloud_max
-training_path <- params$training_path
-# Convertir el objeto sf a un objeto de Google Earth Engine
-area_estudio_ee <- sf_as_ee(area_estudio_sf)
-
-# --- Definir parámetros de descarga de Sentinel-2 ---
-fecha_inicio <- "2024-01-01"
-fecha_fin <- "2024-03-31" # Ejemplo: primer trimestre de 2024
-nubosidad_max <- 10 # Porcentaje máximo de nubosidad
-
-# Colección de imágenes Sentinel-2 (Top of Atmosphere, o S2_SR para reflectancia de superficie)
-coleccion_s2 <- ee$ImageCollection("COPERNICUS/S2") %>%
-  ee$ImageCollection$filterDate(fecha_inicio, fecha_fin) %>%
-  ee$ImageCollection$filterBounds(area_estudio_ee) %>%
-  ee$ImageCollection$filterMetadata("CLOUDY_PIXEL_PERCENTAGE", "less_than", nubosidad_max)
-
-# Para clasificaciones, a menudo se usa la mediana o el promedio de un periodo
-imagen_compuesta <- coleccion_s2$median()$clip(area_estudio_ee)
-
-# Seleccionar las bandas a utilizar para la clasificación
-# B2: Azul, B3: Verde, B4: Rojo, B8: NIR, B11: SWIR1, B12: SWIR2
-bandas_para_clasificar <- c("B2", "B3", "B4", "B8", "B11", "B12")
-imagen_clasificar <- imagen_compuesta$select(bandas_para_clasificar)
-
-# --- Visualizar la imagen compuesta (opcional) ---
-# Puedes visualizarla en el visor de GEE para asegurarte de que es correcta.
-Map$centerObject(area_estudio_ee, 8)
-Map$addLayer(imagen_clasificar,
-             visParams = list(min = 0, max = 3000, bands = c("B4", "B3", "B2")),
-             name = "Sentinel-2 Compuesta")
-
-
-
-download_sentinel(aoi, start_date, end_date, cloud_max)
-# Carga de los índices generados
-dirs_indices <- list.dirs("S2_data/L2A/indices", recursive = FALSE)
-ndvi_stack <- rast(list.files(dirs_indices[grep("NDVI", dirs_indices)], pattern = "\\.tif$", full.names = TRUE))
-evi_stack  <- rast(list.files(dirs_indices[grep("EVI", dirs_indices)],  pattern = "\\.tif$", full.names = TRUE))
-plot(ndvi_stack, main = "NDVI - Sentinel-2")
-plot(evi_stack,  main = "EVI - Sentinel-2")
 ```
 

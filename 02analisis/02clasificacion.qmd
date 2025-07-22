@@ -23,17 +23,20 @@ set.seed(1234)
 
 ```
 
-### 1. Area y periodo de estudio 
+### 1. Área y periodo de estudio
 
-Se define el area de estudio a traves de un shapefile. Se define el año para los datos de entrenamiento y la ventana de tiempo para las imagenes satelitales.
+Se define el área de estudio a través de un shapefile. Se define el año para los datos de entrenamiento y la ventana de tiempo para las imágenes satelitales.
 
 ```{r area, echo=TRUE}
 
-# cuenca de Aconcagua
-# area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconcagua
 
+
+# cuenca de Aconcagua
+# area_file <- "../01entrada/cuencaAconcagua.shp"
 # subsubcuenca de Aconcagua 05420
-area_estudio_sf <- st_read("../01entrada/subsubcuencaAconcagua05420.shp") |>
+area_file <- "../01entrada/subsubcuencaAconcagua05420.shp"
+
+area_estudio_sf <- st_read(area_file) |>
   select("COD_SSUBC")|>
   st_transform(area_estudio_sf, crs = 4326)
 plot(area_estudio_sf)
@@ -50,10 +53,10 @@ fecha_inicio <- "2024-01-01"
 fecha_fin <- "2024-03-31"
 ```
 
-
 ### 2. Parámetros de imagenes satelitales
 
 Definicion de bandas y nubosidad a utilizar para la clasificacion supervisada.
+
 ```{r parametros, echo=TRUE}
 nubosidad_max <- 100 # Porcentaje maximo de nubosidad permitido
 
@@ -91,7 +94,7 @@ writeRaster(capas_mask, "../03salida/capas_mask.tif", overwrite = TRUE)
 
 ```
 
-### 3. Clasificación supervisada con poligonos de entrenamiento
+### 3. Clasificación supervisada con polígonos de entrenamiento
 
 ```{r clasificacion, echo=TRUE}
 # stack con bandas 
@@ -175,7 +178,7 @@ writeRaster(clasificacion_mask, "../03salida/clasificacion2014.tif", overwrite =
 
 ```
 
-### 4. Evaluación de la clasificacion
+### 4. Evaluación de la clasificación
 
 ```{r evaluacion, echo=TRUE, eval=FALSE}
 
