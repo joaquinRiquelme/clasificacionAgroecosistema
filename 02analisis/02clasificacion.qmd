@@ -29,20 +29,20 @@ Se define el área de estudio a través de un shapefile. Se define el año para 
 
 ```{r area, echo=TRUE}
 
-
-
 # cuenca de Aconcagua
-# area_file <- "../01entrada/cuencaAconcagua.shp"
+area_file <- "../01entrada/cuencaAconcagua.shp"
 # subsubcuenca de Aconcagua 05420
-area_file <- "../01entrada/subsubcuencaAconcagua05420.shp"
+# area_file <- "../01entrada/subsubcuencaAconcagua05420.shp"
 
 area_estudio_sf <- st_read(area_file) |>
-  select("COD_SSUBC")|>
-  st_transform(area_estudio_sf, crs = 4326)
+  select(1)|>
+  st_transform(crs = 4326)
+
 plot(area_estudio_sf)
 crs(area_estudio_sf)
 
 ae_vec <-  vect(area_estudio_sf)
+
 # año de entrenamiento
 anho_train <- "2014"
 # anho_train <- "2017"
@@ -58,7 +58,9 @@ fecha_fin <- "2024-03-31"
 Definicion de bandas y nubosidad a utilizar para la clasificacion supervisada.
 
 ```{r parametros, echo=TRUE}
-nubosidad_max <- 100 # Porcentaje maximo de nubosidad permitido
+
+# Porcentaje maximo de nubosidad permitido
+nubosidad_max <- 100 
 
 # Seleccionar las bandas a utilizar para la clasificación
 # B2: Azul, B3: Verde, B4: Rojo, B8: NIR

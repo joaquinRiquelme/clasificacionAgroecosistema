@@ -3,24 +3,26 @@ title: "Datos de entrada para estudio de dinámica de paisaje de cuenca del río
 author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini"
 date: "`r Sys.Date()`"
 format: html
+lang: es
 editor: visual
 ---
 
-```{r preambulo, echo=TRUE, warning=FALSE, results='hide'}
+```{r preambulo, include=FALSE}
 
 # para instalar el paquete sen2r desde github
 # devtools::install_github("ranghetti/sen2r")
 
 library(sf)
 library(ggplot2)
+# library(basemaps)
 library(terra) 
 library(dplyr)
 library(lubridate)
-library(sen2r)
+# library(sen2r)
 library(s2)
 library(gdalraster)
-sen2r::check_gcloud()
-sen2r::check_gcloud_connection()
+# sen2r::check_gcloud()
+# sen2r::check_gcloud_connection()
 
 ```
 
@@ -28,7 +30,7 @@ sen2r::check_gcloud_connection()
 
 En este caso el área de estudio se provee como un archivo vectorial basado en los limites de la cuenca del río Aconcagua.
 
-```{r area, echo=FALSE}
+```{r area, echo=FALSE, message=FALSE, results='hide'}
 
 # cargar archivo shp de area de estudio
 area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconcagua
@@ -39,7 +41,14 @@ area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconc
 area2 <- area_estudio_sf[,"NOM_CUEN"]
 names(area2) <- c("Aconcagua", "geometry")
 
-plot(area2)
+# plot(area2, axes=TRUE)
+
+
+ggplot() + 
+  geom_sf(data = area2, color = "black") +
+  ggtitle("Área de estudio cuenca del Aconcagua")
+
+# basemap(st_transform(area2, crs = 3857), map_service = "esri", map_type = "world_imagery")
 
 ae_extent <- st_bbox(area2)
 ae_extent
@@ -56,7 +65,7 @@ fecha_fin <- "2020-12-31"
 
 Los datos de Sentinel-2 estan disponibles desde el año 2015 hasta la fecha y su periodicidad es de 5 dias.
 
-```{r descarga, echo=FALSE}
+```{r descarga, echo=FALSE, eval=FALSE}
 
 
 
