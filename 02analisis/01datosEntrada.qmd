@@ -100,8 +100,9 @@ down_images2 <- as.data.frame(down_images2)
 down_images2$sens_date <- as.Date(substr(down_images2$down_images2, 12, 19), format = "%Y%m%d")
 down_images2$tile <- substr(down_images2$down_images2, start = 40, stop = 44)
 
-indext319 <- subset(indext219, is.element(MGRS_TILE, unique(down_images2$tile)))
-head(indext319)
+# indext319 <- subset(indext219, is.element(MGRS_TILE, unique(down_images2$tile)))
+indext319 <- indextiles
+# head(indext319)
 
 summary(indext319$CLOUD_COVER)
 hist(indext319$CLOUD_COVER)
@@ -111,7 +112,7 @@ indext319$cloud_pass <- factor(x = NA, levels = c("Valida", "No valida"))
 indext319$cloud_pass[indext319$CLOUD_COVER<=30] <- "Valida"
 indext319$cloud_pass[indext319$CLOUD_COVER>30] <- "No valida"
 table(indext319$cloud_pass)
-
+table(indext319$cloud_pass, indext319$MGRS_TILE)
 
 
 intersect(index$PRODUCT_ID, down_images2)
