@@ -66,7 +66,62 @@ fecha_fin <- "2020-12-31"
 Los datos de Sentinel-2 estan disponibles desde el año 2015 hasta la fecha y su periodicidad es de 5 dias.
 
 ```{r descarga, echo=FALSE, eval=FALSE}
+# listado de todas las iamgenes de sentinel-2
 index <- read.csv(gzfile("../01entrada/index.csv.gz"))
+head(index)
+
+index$tile <- substr(index$MGRS_TILE, 1,3)
+index$tile2 <- substr(index$MGRS_TILE, 1,2)
+head(index)
+
+indext19 <- subset(index, tile=="T19")
+indext219 <- subset(index, tile2=="19")
+unique(indext219$MGRS_TILE)
+unique(indext219$SENSING_TIME)
+head(indext219)
+indext219$SENSING_TIME
+indext219$sens_date <- as.Date(substr(indext219$SENSING_TIME, 1, 10))
+indext219$tile_date <- paste(indext219$MGRS_TILE)
+head(indext219)
+write.csv(indext219, "../03salida/index_T19.csv")
+
+indextiles <- subset(indext219, is.element(MGRS_TILE, c("19HBD", "19HCD", "19HDD","19HCE")))
+write.csv(indextiles, file = "../03salida/index_T19_aconcagua.csv", row.names = FALSE)
+
+
+unique(indext219$MGRS_TILE)
+
+
+# imagenes descargadas
+down_images <- list.files("/media/joaquin/joaquin/sentinel/sentinel-2/")
+
+down_images2 <- gsub(pattern = ".zip",replacement = "", x = down_images)
+down_images2 <- as.data.frame(down_images2)
+down_images2$sens_date <- as.Date(substr(down_images2$down_images2, 12, 19), format = "%Y%m%d")
+down_images2$tile <- substr(down_images2$down_images2, start = 40, stop = 44)
+
+indext319 <- subset(indext219, is.element(MGRS_TILE, unique(down_images2$tile)))
+head(indext319)
+
+summary(indext319$CLOUD_COVER)
+hist(indext319$CLOUD_COVER)
+boxplot(indext319$CLOUD_COVER)
+
+indext319$cloud_pass <- factor(x = NA, levels = c("Valida", "No valida"))
+indext319$cloud_pass[indext319$CLOUD_COVER<=30] <- "Valida"
+indext319$cloud_pass[indext319$CLOUD_COVER>30] <- "No valida"
+table(indext319$cloud_pass)
+
+
+
+intersect(index$PRODUCT_ID, down_images2)
+intersect(down_images2, unique(indext219$PRODUCT_ID))
+```
+
+
+
+```{r descarga, echo=FALSE, eval=FALSE}
+
 
 
 fechas_sentinel <- tibble(
