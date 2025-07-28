@@ -99,6 +99,7 @@ down_images2 <- gsub(pattern = ".zip",replacement = "", x = down_images)
 down_images2 <- as.data.frame(down_images2)
 down_images2$sens_date <- as.Date(substr(down_images2$down_images2, 12, 19), format = "%Y%m%d")
 down_images2$tile <- substr(down_images2$down_images2, start = 40, stop = 44)
+summary(down_images2$sens_date)
 
 # indext319 <- subset(indext219, is.element(MGRS_TILE, unique(down_images2$tile)))
 indext319 <- indextiles
