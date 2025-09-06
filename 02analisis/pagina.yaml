@@ -1,0 +1,21 @@
+project:
+  type: website
+
+website:
+  title: "Dinamica de paisaje de cuenca del Aconcagua"
+  navbar:
+    left:
+      - text: "1. Datos"
+        href: 01datosEntrada.qmd
+      - text: "2. Clasificación"
+        href: 02clasificacion.qmd
+      - text: "3. Métricas"
+        href: 03metricas.qmd
+      - text: "4. Dinámica"
+        href: 04dinamica.qmd
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true

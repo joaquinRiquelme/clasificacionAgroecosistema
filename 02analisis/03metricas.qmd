@@ -1,0 +1,169 @@
+---
+title: "Metricas y diversidad de paisaje de la cuena del río Aconcagua"
+author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini y Iongel Durán Llacer"
+date: "`r Sys.Date()`"
+format: html
+editor: visual
+---
+
+```{r preambulo, echo=FALSE, results='hide'}
+library(sf)
+library(terra)
+library(tidyverse)
+library(landscapemetrics)
+
+
+```
+
+## Cobertura de suelo
+
+Para la estimación de las métricas y diversidad de paisaje se utilizará como base la clasificación de usos y coberturas de suelo **hhh**
+
+-   Clasificacion propia
+-   CR2LUC CR2
+-   LCM de Copernicus
+
+```{r lclu, echo=TRUE}
+
+area_file <- "../01entrada/cuencaAconcagua.shp"
+# subsubcuenca de Aconcagua 05420
+# area_file <- "../01entrada/subsubcuencaAconcagua05420.shp"
+
+area_estudio_sf <- st_read(area_file) |>
+  select(1)|>
+  st_transform(crs = 4326)
+
+plot(area_estudio_sf)
+crs(area_estudio_sf)
+
+ae_vec <-  vect(area_estudio_sf)
+
+# lclu <- terra::rast("../01entrada/lcf/CR2LUC_v1.0_lcf_2017_001deg.nc")
+# lclu$lcf_100
+
+# plot(lclu$lcf_100)
+
+# lcm1 <- terra::rast("../01entrada/LCFM_LCM-10_V100_2020_S33W072_cog/LCFM_LCM-10_V100_2020_S33W072_MAP.tif")
+# lcm2 <- terra::rast("../01entrada/LCFM_LCM-10_V100_2020_S36W072_cog/LCFM_LCM-10_V100_2020_S36W072_MAP.tif")
+
+# lcm <- mosaic(lcm1, lcm2)
+
+# terra::writeRaster(lcm, filename = "../03salida/lcm2020.tif")
+lcm <- terra::rast("../03salida/lcm2020.tif")
+
+lcm.ae <- crop(lcm, area_estudio_sf)
+plot(lcm.ae)
+
+lcm.cuenca <- mask(lcm.ae, area_estudio_sf)
+lcm.cuenca <- crop(lcm.cuenca, area_estudio_sf)
+plot(lcm.cuenca)
+
+
+conteo.clases <- freq(lcm.cuenca)
+conteo.clases
+
+res(lcm.cuenca)
+lcm.cuenca
+
+lcm.cuenca19s <- project(lcm.cuenca, "epsg:32719", method="mode")
+lcm.cuenca19s
+
+terra::writeRaster(lcm.cuenca19s, filename = "../03salida/lcm.aconcagua.2020.19s.tif")
+
+plot(lcm.cuenca19s)
+sum(freq(lcm.cuenca19s))
+```
+
+### Clases de cobertura
+
+```{r clases, echo=FALSE}
+
+unique(lcm.cuenca)
+
+lc.clases <- rbind.data.frame(c("10", "Tree cover"),
+                              c("20", "Shrubland"),
+                              c("30", "Grassland"),
+                              c("40", "Cropland"),
+                              c("50", "Herbaceous wetland"),
+                              c("60", "Mangroves"),
+                              c("70", "Moss and lichen"),
+                              c("80", "Bare/sparse vegetation"),
+                              c("90", "Built-up"),
+                              c("100", "Permanent water bodies"),
+                              c("110", "Snow and ice"),
+                              c("254", "Unclassified"))
+
+names(lc.clases) <- c("Clase", "Leyenda")
+lc.clases
+
+```
+
+### Periodos de estudio
+
+## Métricas de paisaje
+
+Para estimar las metricas de paisaje se utilizara el paquete landscapemetrics. Las metricas se evaluaran a nivel de parche, clase y paisaje.
+
+### Metricas a nivel de parche
+
+```{r parche, echo=FALSE}
+
+terra::crs(lcm.cuenca)
+# lcm.cuenca19s <- project(lcm.cuenca, "epsg:32719")
+
+res(lcm.cuenca19s)
+ncell(lcm.cuenca19s)
+(res(lcm.cuenca19s)[1])^2*ncell(lcm.cuenca19s)/1000000
+
+View(landscapemetrics::list_lsm())
+
+# area de parche
+p_area <- landscapemetrics::lsm_p_area(lcm.cuenca19s)
+
+p_area |> group_by(class) |> summarise(area=sum(value),
+                                       mean=mean(value),
+                                       sd=sd(value))
+
+# distancia euclideana al vecino mas cercano
+p_enn <- landscapemetrics::lsm_p_enn(lcm.cuenca19s)
+
+p_enn |> group_by(class) |> summarise(mean.dist=mean(value),
+                                      min.dist=min(value),
+                                      max.dist=max(value))
+
+# forma
+p_shape <- landscapemetrics::lsm_p_shape(lcm.cuenca19s)
+p_shape |> group_by(class) |> summarise(mean=mean(value))
+
+p_contig <- landscapemetrics::lsm_p_contig(lcm.cuenca19s)
+p_contig |> group_by(class) |> summarise(mean=mean(value))
+
+```
+
+### Metricas a nivel de clase
+
+```{r clase, echo=FALSE}
+
+c_ai <- landscapemetrics::lsm_c_ai(lcm.cuenca19s)
+c_ca <- landscapemetrics::lsm_c_ca(lcm.cuenca19s)
+c_cohesion <- landscapemetrics::lsm_c_cohesion(lcm.cuenca19s)
+c_np <- landscapemetrics::lsm_c_np(lcm.cuenca19s)
+c_pd <- landscapemetrics::lsm_c_pd(lcm.cuenca19s)
+c_te <- landscapemetrics::lsm_c_te(lcm.cuenca19s)
+
+```
+
+### Metricas a nivel de paisaje
+
+```{r paisaje, echo=FALSE}
+l_ai <- landscapemetrics::lsm_l_ai(lcm.cuenca19s)
+l_np <- landscapemetrics::lsm_l_np(lcm.cuenca19s)
+l_pd <- landscapemetrics::lsm_l_pd(lcm.cuenca19s)
+l_pr <- landscapemetrics::lsm_l_pr(lcm.cuenca19s)
+l_prd <- landscapemetrics::lsm_l_prd(lcm.cuenca19s)
+l_ta <- landscapemetrics::lsm_l_ta(lcm.cuenca19s)
+
+
+```
+
+### Diversidad beta
