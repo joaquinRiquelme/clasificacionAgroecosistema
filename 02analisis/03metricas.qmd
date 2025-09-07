@@ -100,11 +100,13 @@ lc.clases
 
 ### Periodos de estudio
 
-## Métricas de paisaje
+## Cálculo de métricas de paisaje
 
-Para estimar las metricas de paisaje se utilizara el paquete landscapemetrics. Las metricas se evaluaran a nivel de parche, clase y paisaje.
+El estudio del paisaje se pue Los parches pueden agruparse en clases con categorías definidas. Las métricas de paisaje son variables que se obtienen a partir del tamaño, forma, conectividad y diversidad de los parches presentes en el paisaje. Las métricas de tamaño muestra la cantidad de clases distintas que existen en un espacio y el tama
 
-### Metricas a nivel de parche
+Los cálculos se hicieron con el paquete *landscapemetrics* . Las métricas se calculan a nivel de parche, clase y paisaje.
+
+### Métricas a nivel de parche
 
 ```{r parche, echo=FALSE}
 
@@ -117,12 +119,30 @@ ncell(lcm.cuenca19s)
 
 View(landscapemetrics::list_lsm())
 
+patches_landscape <- landscapemetrics::get_patches(landscape = lcm.cuenca19s, return_raster = FALSE, to_disk = TRUE)
+# patches_landscape_raster <- landscapemetrics::get_patches(landscape = lcm.cuenca19s, return_raster = TRUE, to_disk = FALSE)
+patches_landscape$layer_1$class_10[1000:1010,1:10]
+str(patches_landscape)
+lcm.cuenca19s
+
+r1 <- rast(patches_landscape$layer_1$class_10, crs="epsg:32719", extent=ext(lcm.cuenca19s) )
+plot(r1)
+
+r2 <- rast(patches_landscape$layer_1$class_20, crs="epsg:32719", extent=ext(lcm.cuenca19s) )
+plot(r2)
+
+terra::writeRaster(x = patches_landscape$layer_1, filename = "../03salida/patches.tif")
+
 # area de parche
 p_area <- landscapemetrics::lsm_p_area(lcm.cuenca19s)
 
+head(p_area)
+
 p_area |> group_by(class) |> summarise(area=sum(value),
                                        mean=mean(value),
-                                       sd=sd(value))
+                                       sd=sd(value)); gc()
+
+# mapa de parches y area
 
 # distancia euclideana al vecino mas cercano
 p_enn <- landscapemetrics::lsm_p_enn(lcm.cuenca19s)
