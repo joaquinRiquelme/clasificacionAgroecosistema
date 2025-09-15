@@ -1,10 +1,11 @@
 ---
 title: "Datos de entrada para estudio de dinámica de paisaje de cuenca del río Aconcagua"
-author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini"
+author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini y Iongel Durán Llacer"
 date: "`r Sys.Date()`"
 format: html
 lang: es
 editor: visual
+bibliography: ../01entrada/dinamicaAgroecosistema.bib
 ---
 
 ```{r preambulo, include=FALSE}
@@ -28,10 +29,11 @@ library(gdalraster)
 
 ### 1. Determinación de área y periodo de estudio
 
-En este caso el área de estudio se provee como un archivo vectorial basado en los limites de la cuenca del río Aconcagua.
+#### 1.1 Cuenca 
+El área de estudio se provee como un archivo vectorial basado en los limites de la cuenca del río Aconcagua. Se muestran opciones para seleccion de subcuencas.
+
 
 ```{r area, echo=FALSE, message=FALSE, results='hide'}
-
 # cargar archivo shp de area de estudio
 area_estudio_sf <- st_read("../01entrada/cuencaAconcagua.shp") # cuenca de Aconcagua
 # area_estudio_sf <- st_read("../01entrada/.shp") # cuenca de Aconcagua
@@ -52,20 +54,184 @@ ggplot() +
 
 ae_extent <- st_bbox(area2)
 ae_extent
+```
 
+#### 1.2 Periodo de estudio
+Se debe definir el inicio y término del periodo de estudio.
+
+```{r tiempo, echo=FALSE, message=FALSE, results='hide'}
 # fecha de inicio
-fecha_inicio <- "2020-06-01"
+fecha_inicio <- "2019-07-01"
 # fecha de termino 
-fecha_fin <- "2020-12-31"
+fecha_fin <- "2020-06-30"
 
 
 ```
 
-### 2. Descarga de imágenes Sentinel-2
+### 2. Presencia de cultivos y clasificación de uso de suelo
+
+Se compilan datos de presencia de cultivos y productos de cobertura de suelo. Se unifican los nombres de las clases.
+
+#### 2.1 Presencia de cultivos ODEPA
+
+Para el modelo de clasificación de coberturas de suelo se utilizan los datos de ODEPA de presencia de cultivos para la cuenca del Aconcagua.
+
+```{r odepa}
+cultivos14 <- st_read("../01entrada/catfrut_valparaiso.gpkg", layer =  '2014')
+cultivos17 <- st_read("../01entrada/catfrut_valparaiso.gpkg", layer =  '2017')
+cultivos20 <- st_read("../01entrada/catfrut_valparaiso.gpkg", layer =  '2020')
+plot(cultivos14)
+
+especies <- data.frame(Especie = sort(union(unique(cultivos14$ESPECIE), union(unique(cultivos17$ESPECIE), unique(cultivos20$ESPECIE)))))
+
+especies$Estacional[is.element(especies$Especie, 
+                               c("CHIRIMOYO", "FEIJOA", "KIWI", "KIWI GOLD O KIWI AMARILLO", "KUMQUAT",
+                                 "LIMA", "LIMONERO", "LUCUMO", "MANDARINO", "NARANJO", 
+                                 "NISPERO", "OLIVO", "PALTO", "PAPAYO", "POMELO",
+                                 "TUNA"))] <- "Perenne" 
+
+especies$Estacional[is.element(especies$Especie, 
+                               c("ALMENDRO", "ARANDANO AMERICANO", "CAQUI", "CEREZO", "CIRUELO EUROPEO",
+                                 "CIRUELO JAPONES", "DAMASCO", "DURAZNERO CONSUMO FRESCO", 
+                                 "DURAZNERO TIPO CONSERVERO", "FRAMBUESA", "GRANADO", "HIGUERA",
+                                 "MANZANO ROJO", "MANZANO VERDE", "MEMBRILLO", "NECTARINO", "NOGAL",
+                                 "NUEZ DE MACADAMIA", "PERA ASIATICA", "PERAL", "PISTACHO", "PLUOTS",
+                                 "VID DE MESA"))] <- "Caducifolio" 
+
+setdiff(unique(cultivos17$ESPECIE), unique(cultivos20$ESPECIE))
+setdiff(unique(cultivos14$ESPECIE), unique(cultivos20$ESPECIE))
+setdiff(unique(cultivos14$ESPECIE), unique(cultivos17$ESPECIE))
+unique(cultivos20$ESPECIE)
+
+
+library(polyglotr)
+
+text <- especies$Especie
+text <- "Hola mundo"
+
+# Translate using MyMemory Translation API
+translation_mymemory <- mymemory_translate(text, target_language = "en", source_language = "es")
+
+# Translate using Google Translate
+translation_google <- google_translate(text, target_language = "en", source_language = "es")
+
+especies.en <- especies |> 
+  group_by(Especie, Estacional) |>
+  summarise(esp.en = google_translate(Especie, target_language = "en", source_language = "es"))
+
+especies.en$esp.en[especies.en$esp.en=="American Arandano"] <- "American cranberry" 
+especies.en$esp.en[especies.en$esp.en=="KHAKI"] <- "kaki" 
+especies.en$esp.en[especies.en$esp.en=="Cerezo"] <- "sweet cherry" 
+especies.en$esp.en[especies.en$Especie=="CHIRIMOYO"] <- "cherimoya" 
+especies.en$esp.en[especies.en$esp.en=="European plum"] <- "plum" 
+especies.en$esp.en[especies.en$Especie=="DAMASCO"] <- "apricot" 
+especies.en$esp.en[especies.en$esp.en=="Peach fresh consumption"] <- "peach" 
+especies.en$esp.en[especies.en$esp.en=="Conservero type peach"] <- "peach" 
+especies.en$esp.en[especies.en$Especie=="FEIJOA"] <- "pineapple guava" 
+especies.en$esp.en[especies.en$Especie=="FRAMBUESA"] <- "red raspberry" 
+especies.en$esp.en[especies.en$Especie=="HIGUERA"] <- "common fig" 
+especies.en$esp.en[especies.en$Especie=="KIWI"] <- "kiwifruit" 
+especies.en$esp.en[especies.en$Especie=="KIWI GOLD O KIWI AMARILLO"] <- "golden kiwifruit" 
+
+library("taxize")
+a <- comm2sci(com='peach')[1]
+a[[1]]
+
+esp.sci <- especies.en |>
+  group_by(Especie, esp.en, Estacional) |>
+  summarise(sci = comm2sci(com=esp.en)[[1]])
+
+esp.sci
+esp.sci$sci[esp.sci$esp.en=="cherry tree"] <- "Prunus avium" 
+
+cultivos$categoria1 <- cultivos$ESPECIE
+unique(cultivos$ESPECIE)
+cultivos[is.element(cultivos$ESPECIE, c("NECTARINO",
+                                        "LIMONERO",
+                                        "NARANJO",
+                                        "MANDARINO")), "categoria1"] <- "Citrico"
+
+
+
+
+  
+head(cultivos)
+write.csv(cultivos, "../03salida/cultivos.csv")
+
+```
+
+#### 2.2 Catastro vegetacional 
+
+#### 2.3 Mapbiomas
+```{r mapbiomas}
+url_mapbiomas <- paste("https://storage.googleapis.com/mapbiomas-public/initiatives/chile/coverage/chile_coverage_",
+                       2000:2022,".tif", sep="")
+
+url_mapbiomas <- paste("https://storage.googleapis.com/mapbiomas-public/initiatives/chile/coverage/chile_coverage_",
+                       2022,".tif", sep="")
+
+nombre_archivo <- file.path("../01entrada", substr(url_mapbiomas, nchar(url_mapbiomas)-22, nchar(url_mapbiomas)))
+
+# Descargar la imagen
+download.file(url_mapbiomas, destfile = nombre_archivo, mode = "wb", method = "libcurl")
+
+mb2000 <- terra::rast("../01entrada/chile_coverage_2000.tif")
+plot(mb2000)
+
+```
+
+#### 2.4 LCM Copernicus
+```{r LCM}
+lcm <- terra::rast("../03salida/lcm2020.tif")
+
+lcm.ae <- crop(lcm, area_estudio_sf)
+plot(lcm.ae)
+
+lcm.cuenca <- mask(lcm.ae, area_estudio_sf)
+lcm.cuenca <- crop(lcm.cuenca, area_estudio_sf)
+plot(lcm.cuenca)
+
+
+conteo.clases <- freq(lcm.cuenca)
+conteo.clases
+
+res(lcm.cuenca)
+lcm.cuenca
+
+lcm.cuenca19s <- project(lcm.cuenca, "epsg:32719", method="mode")
+lcm.cuenca19s
+
+terra::writeRaster(lcm.cuenca19s, filename = "../03salida/lcm.aconcagua.2020.19s.tif")
+
+```
+
+
+### 3. Variables topográficas
+
+Se utilizará un modelo digital de elevación como base para asignar la altitud sobre nivel del mar para el área de estudio.
+
+#### 3.1 elevacion
+```{r elevacion}
+elevacion <- terra::rast("../01entrada/.tif")
+```
+
+#### 3.2 Pendiente
+```{r slope}
+slope <- terra::terrain(elevacion, v="slope", neighbors=8, unit="degrees", filename="../03salida/slope_radians.tif")
+```
+
+#### 3.3 Exposicion
+```{r aspect}
+aspect <- terra::terrain(elevacion, v="aspect", neighbors=8, unit="degrees", filename="../03salida/slope_radians.tif")  
+
+
+```
+
+### 4. Descarga de imágenes Sentinel-2
 
 Los datos de Sentinel-2 estan disponibles desde el año 2015 hasta la fecha y su periodicidad es de 5 dias.
 
-```{r descarga, echo=FALSE, eval=FALSE}
+```{r descarga1, echo=FALSE, eval=FALSE}
 # listado de todas las iamgenes de sentinel-2
 index <- read.csv(gzfile("../01entrada/index.csv.gz"))
 head(index)
@@ -119,8 +285,6 @@ table(indext319$cloud_pass, indext319$MGRS_TILE)
 intersect(index$PRODUCT_ID, down_images2)
 intersect(down_images2, unique(indext219$PRODUCT_ID))
 ```
-
-
 
 ```{r descarga, echo=FALSE, eval=FALSE}
 
@@ -259,20 +423,5 @@ safe_getMetadata(example_s2_list, "sensing_datetime")
 
 ```
 
-### 3. Modelo de elevación de terreno
 
-Se utilizará un modelo digital de elevación como base para asignar la altitud sobre nivel del mar para el área de estudio.
-```{r elevacion}
-
-```
-
-
-### 4. Categorías de clasificacuón de cultivos
-
-Para el modelo de clasificación de coberturas de suelo se utilizan los datos de ODEPA de presencia de cultivos para la cuenca del Aconcagua.
-
-```{r odepa}
-
-
-```
-
+### 5. Indices de vegetacion y variables fenológicas

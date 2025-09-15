@@ -1,0 +1,54 @@
+---
+title: "Dinámica de paisaje en la cuenca del río Aconcagua"
+author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini y Iongel Durán Llacer"
+date: "`r Sys.Date()`"
+format: html
+lang: es
+editor: visual
+bibliography: ../01entrada/dinamicaAgroecosistema.bib
+---
+
+```{r preambulo, echo=FALSE, results='hide'}
+library(sf)
+library(terra)
+library(tidyverse)
+library(landscapemetrics)
+
+
+```
+
+### 1. Dinámica a nivel de parche
+
+El estudio del cambio en las métricas a nivel de parche nos permite evaluar los cambios que se han producido en cada clase en el periodo estudiado. Patrones de disminucion de area y aumento de la densidad de parches muestran procesos de fragmentacion. 
+
+
+```{r parche}
+1 + 1
+```
+
+### 2. Dinámica de clases
+
+Al estudiar la dinámica de las clases se pueden conocer los cambios agregados que se han generado en el sistema y que clases se han mantenido sin cambios o han experimentado disminución o aumento.
+
+```{r clase}
+#| echo: false
+2 * 2
+```
+
+### 3. Dinámica a nivel de paisaje
+
+Las metricas agregadas a nivel de paisaje nos muestran los cambios a escala 
+
+
+```{r paisaje}
+
+```
+
+### 4. Cambios en la diversidad de paisaje
+
+La diversidad de clases de cultivos permite evaluar la heterogeneidad del paisaje. Cuando esa heterogeniedidad disminuye vemos una disminucion en la diversidad beta y estamos frente a un proceso de homogenizacion
+
+```{r diversidad}
+
+```
+

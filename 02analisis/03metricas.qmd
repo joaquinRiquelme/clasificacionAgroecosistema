@@ -3,7 +3,9 @@ title: "Metricas y diversidad de paisaje de la cuena del río Aconcagua"
 author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini y Iongel Durán Llacer"
 date: "`r Sys.Date()`"
 format: html
+lang: es
 editor: visual
+bibliography: ../01entrada/dinamicaAgroecosistema.bib
 ---
 
 ```{r preambulo, echo=FALSE, results='hide'}
@@ -15,7 +17,7 @@ library(landscapemetrics)
 
 ```
 
-## Cobertura de suelo
+### 1. Cobertura de suelo
 
 Para la estimación de las métricas y diversidad de paisaje se utilizará como base la clasificación de usos y coberturas de suelo **hhh**
 
@@ -72,9 +74,11 @@ terra::writeRaster(lcm.cuenca19s, filename = "../03salida/lcm.aconcagua.2020.19s
 
 plot(lcm.cuenca19s)
 sum(freq(lcm.cuenca19s))
+class(lcm.cuenca19s)
+
 ```
 
-### Clases de cobertura
+#### 1.2 Clases de cobertura
 
 ```{r clases, echo=FALSE}
 
@@ -98,15 +102,15 @@ lc.clases
 
 ```
 
-### Periodos de estudio
+### 2. Periodos de estudio
 
-## Cálculo de métricas de paisaje
+### 3. Cálculo de métricas de paisaje
 
 El estudio del paisaje se pue Los parches pueden agruparse en clases con categorías definidas. Las métricas de paisaje son variables que se obtienen a partir del tamaño, forma, conectividad y diversidad de los parches presentes en el paisaje. Las métricas de tamaño muestra la cantidad de clases distintas que existen en un espacio y el tama
 
 Los cálculos se hicieron con el paquete *landscapemetrics* . Las métricas se calculan a nivel de parche, clase y paisaje.
 
-### Métricas a nivel de parche
+#### 3.1 Métricas a nivel de parche
 
 ```{r parche, echo=FALSE}
 
@@ -160,7 +164,7 @@ p_contig |> group_by(class) |> summarise(mean=mean(value))
 
 ```
 
-### Metricas a nivel de clase
+#### 3.2 Metricas a nivel de clase
 
 ```{r clase, echo=FALSE}
 
@@ -173,7 +177,7 @@ c_te <- landscapemetrics::lsm_c_te(lcm.cuenca19s)
 
 ```
 
-### Metricas a nivel de paisaje
+#### 3.3 Metricas a nivel de paisaje
 
 ```{r paisaje, echo=FALSE}
 l_ai <- landscapemetrics::lsm_l_ai(lcm.cuenca19s)
@@ -186,4 +190,8 @@ l_ta <- landscapemetrics::lsm_l_ta(lcm.cuenca19s)
 
 ```
 
-### Diversidad beta
+#### 3.4 Diversidad beta
+
+```{r}
+landscapemetrics::list_lsm()
+```

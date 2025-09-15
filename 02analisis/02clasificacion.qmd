@@ -1,49 +1,69 @@
 ---
-title: "Clasificacion de cobertura de suelo"
-author: "Joaquín Riquelme Alarcón y Francisco Zambrano Bigiarini"
+title: "Clasificación supervisada de coberturas de uso de suelo en la cuenca del río Aconcagua"
+author: "Joaquín Riquelme Alarcón, Francisco Zambrano Bigiarini y Iongel Durán Llacer"
 date: "`r Sys.Date()`"
 format: html
+lang: es
 editor: visual
+bibliography: ../01entrada/dinamicaAgroecosistema.bib
 ---
 
-```{r preambulo, echo=TRUE, warning=FALSE, error=FALSE, results='hide'}
+```{r preambulo, echo=FALSE, warning=FALSE, error=FALSE, results='hide', include=FALSE}
 
 # devtools::install_github("ranghetti/sen2r")
-
-library(sen2r)
-library(sf)
+# librerias 
 library(dplyr)
 library(tidyverse)
-library(ggplot2)
+library(sf)
 library(terra) 
+
+# library(sen2r)
+
+library(ggplot2)
+library(leaflet)
 library(RColorBrewer)
+
 library(randomForest)
 library(caret)
-set.seed(1234)
+set.seed(2025)
 
 ```
 
-### 1. Área y periodo de estudio
+### 1. Área y período de estudio
 
-Se define el área de estudio a través de un shapefile. Se define el año para los datos de entrenamiento y la ventana de tiempo para las imágenes satelitales.
+# Área de estudio la cuenca del río Aconcagua
 
-```{r area, echo=TRUE}
+La cuenca del río Aconcagua es de tipo exorreica y recorre 200 km desde su nacimiento en la cordillera en el oeste hasta su desembocadura en el océano Pacífico por el este (Ver figura @fig-mapa. El río Aconcagua nace de la suma de las aguas provenientes de la cordillera de Los Andes, la cordillera de La Costa y de los cerros transversales que componen el paisaje de la región de Valparaíso en la zona central de Chile [@munoz_aguayo_redefinicion_2014]. Esta cuenca se encuentra en una zona de transición entre climas semiarido por el norte a templado mediterráneo por el sur . Las precipitaciones provienen principalmente de los ciclones del pacífico y tienen una estacionalidad marcada en invierno entre los meses de mayo y septiembre [@webb_water_2021]. Otro aporte de agua proviene de las neblinas costeras que influyen sobre la zona baja de la cuenca. La zona media se caracteriza por valles y lomas con zonas regadas y de secano. En la zona alta de la cuenca los glaciares y nieves aportan agua en primavera y comienzos del verano [@bown_recent_2008].
 
+Figura Área de estudio
+
+
+```{r area, echo=FALSE, message=FALSE, warning=FALSE}
+#| label: fig-mapa
+#| fig-cap: "Cuenca del río Aconcagua, región de Valparíso, Chile."
 # cuenca de Aconcagua
-area_file <- "../01entrada/cuencaAconcagua.shp"
+# area_file <- "../01entrada/cuencaAconcagua.shp"
 # subsubcuenca de Aconcagua 05420
-# area_file <- "../01entrada/subsubcuencaAconcagua05420.shp"
+area_file <- "../01entrada/subsubcuencaAconcagua05420.shp" 
 
-area_estudio_sf <- st_read(area_file) |>
+area_estudio_sf <- st_read(area_file, quiet = TRUE) |>
   select(1)|>
   st_transform(crs = 4326)
 
-plot(area_estudio_sf)
-crs(area_estudio_sf)
+# plot(area_estudio_sf)
+# crs(area_estudio_sf)
 
 ae_vec <-  vect(area_estudio_sf)
+# plot(ae_vec)
+# mapa base con leaflet
 
-# año de entrenamiento
+plet(ae_vec)
+```
+
+Se define el año para los datos de entrenamiento y la ventana de tiempo para las imágenes satelitales.
+
+```{r tiempo, eval=FALSE}
+# año de entrenamiento}
 anho_train <- "2014"
 # anho_train <- "2017"
 # anho_train <- "2020"
@@ -57,7 +77,7 @@ fecha_fin <- "2024-03-31"
 
 Definicion de bandas y nubosidad a utilizar para la clasificacion supervisada.
 
-```{r parametros, echo=TRUE}
+```{r parametros, echo=TRUE, include=FALSE, eval=FALSE}
 
 # Porcentaje maximo de nubosidad permitido
 nubosidad_max <- 100 
@@ -93,12 +113,13 @@ crs(capas_mask)
 crs(area_estudio_sf)
 writeRaster(capas_mask, "../03salida/capas_mask.tif", overwrite = TRUE)
 
+capas_mask <- terra::rast("../03salida/capas_mask.tif")
 
 ```
 
 ### 3. Clasificación supervisada con polígonos de entrenamiento
 
-```{r clasificacion, echo=TRUE}
+```{r clasificacion, echo=TRUE, include=FALSE, eval=FALSE}
 # stack con bandas 
 # bandas_stack <- rast(capas_mask)
 bandas_stack <- rast(capas_crop)
@@ -141,6 +162,76 @@ write_csv(train_df, file = "../03salida/train_df.csv")
 train_df2 <- train_df[sample(1:nrow(train_df), size = nrow(train_df)*.01, replace = FALSE),]
 write_csv(train_df2, file = "../03salida/train_df2.csv")
 
+train_df2 <- read_csv(file = "../03salida/train_df2.csv")
+
+# modelos con tidymodels
+library(tidymodels)
+
+head(train_df2)
+str(train_df2)
+
+train_df2$class <- as.factor(train_df2$class)
+
+# dividir los datos
+datos_split <- initial_split(train_df2, prop = 0.8, strata = class) 
+# strata = class asegura que la proporción de cada clase sea similar en ambos sets
+
+datos_train <- training(datos_split)
+datos_test  <- testing(datos_split)
+
+# Preprocesamiento con recipes
+datos_recipe <- recipe(class ~ ., data = datos_train) %>%
+  step_normalize(all_predictors()) 
+
+# Especificación del modelo
+rf_datos <- rand_forest(mode = "classification") %>%
+  set_engine("ranger")
+
+# Combinar en un "workflow"
+datos_wf <- workflow() %>%
+  add_recipe(datos_recipe) %>%
+  add_model(rf_datos)
+
+# Ajustar el modelo
+# La función fit() entrena el modelo usando el workflow y los datos de entrenamiento
+rf_fit <- fit(datos_wf, data = datos_train)
+
+
+# Guardar modelo
+saveRDS(rf_fit, file = "../03salida/rf_fit.RDS")
+
+```
+
+
+### 4. Evaluación de la clasificación
+
+
+```{r evaluacion, echo=TRUE, include=FALSE, eval=FALSE}
+# Evaluación del modelo
+datos_test_predictions <- predict(rf_fit, new_data = datos_test, type = "class") %>%
+  bind_cols(datos_test)
+
+# Calculamos la exactitud (accuracy)
+accuracy(datos_test_predictions, truth = class, estimate = .pred_class)
+
+# Calculamos la matriz de confusión
+conf_mat(datos_test_predictions, truth = class, estimate = .pred_class)
+
+
+clasificacion0 <- terra::predict(capas_mask, #mask=TRUE,
+                                rf_fit, 
+                                type = "class")#, cores = events)
+
+
+plot(clasificacion0, main = "Clasificación Random Forest supervisada")
+
+
+class(clasificacion0)
+clasificacion_mask <- terra::mask(x = clasificacion0, mask = ae_vec)
+plot(clasificacion_mask)
+writeRaster(clasificacion_mask, "../03salida/clasificacion2014.tif", overwrite = TRUE)
+
+# 
 
 # Validación cruzada y ajuste de hiperparámetros
 ctrl <- trainControl(method = "cv", number = 5)
@@ -178,11 +269,6 @@ writeRaster(clasificacion_mask, "../03salida/clasificacion2014.tif", overwrite =
 # writeRaster(clasificacion, "../03salida/clasificacion.tif", overwrite = TRUE)
 
 
-```
-
-### 4. Evaluación de la clasificación
-
-```{r evaluacion, echo=TRUE, eval=FALSE}
 
 
 p1 <- createDataPartition(train_df2$class, p = 0.7, list = FALSE)

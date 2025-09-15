@@ -1,6 +1,6 @@
 <PAMDataset>
   <PAMRasterBand band="1">
-    <Description>class</Description>
+    <Description>.pred_class</Description>
     <CategoryNames>
       <Category></Category>
       <Category>ALMENDRO</Category>
